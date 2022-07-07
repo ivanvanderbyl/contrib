@@ -32,9 +32,9 @@ type (
 		*schemaGenerator
 
 		entc.DefaultExtension
-		path      string
-		hooks     []gen.Hook
-		templates []*gen.Template
+		outputWriter func(*ast.Schema) error
+		hooks        []gen.Hook
+		templates    []*gen.Template
 	}
 
 	// ExtensionOption allows for managing the Extension configuration
@@ -56,7 +56,17 @@ type (
 //
 func WithSchemaPath(path string) ExtensionOption {
 	return func(ex *Extension) error {
-		ex.path = path
+		ex.outputWriter = func(s *ast.Schema) error {
+			return os.WriteFile(path, []byte(printSchema(s)), 0644)
+		}
+		return nil
+	}
+}
+
+// WithOutputWriter sets the function to write the generated schema.
+func WithOutputWriter(w func(*ast.Schema) error) ExtensionOption {
+	return func(ex *Extension) error {
+		ex.outputWriter = w
 		return nil
 	}
 }
@@ -212,7 +222,7 @@ func (e *Extension) genSchemaHook() gen.Hook {
 				return err
 			}
 
-			if e.path == "" || !(e.genSchema || e.genWhereInput || e.genMutations) {
+			if e.outputWriter == nil || !(e.genSchema || e.genWhereInput || e.genMutations) {
 				return nil
 			}
 
@@ -220,7 +230,7 @@ func (e *Extension) genSchemaHook() gen.Hook {
 			if err != nil {
 				return err
 			}
-			return os.WriteFile(e.path, []byte(printSchema(schema)), 0644)
+			return e.outputWriter(schema)
 		})
 	}
 }
